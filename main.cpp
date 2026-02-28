@@ -11,14 +11,14 @@
 using namespace std;
 
 static void printMovieLine(const Movie& m) {
-    cout << m.name << ", " << (m.rating10 / 10) << "." << (m.rating10 % 10) << "\n";
+    // Print EXACT rating string (formatted like fixed<<setprecision(1) at read time)
+    cout << m.name << ", " << m.rating_out << "\n";
 }
 
 int main(int argc, char* argv[]) {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-   
     if (argc != 2 && argc != 3) {
         cerr << "Usage: ./runMovies movieFilename [prefixFilename]\n";
         return 1;
@@ -26,7 +26,6 @@ int main(int argc, char* argv[]) {
 
     const string movieFilename = argv[1];
 
-   
     vector<Movie> movies;
     try {
         movies = readMoviesCSV(movieFilename);
@@ -37,7 +36,7 @@ int main(int argc, char* argv[]) {
 
     sortByName(movies);
 
-    
+    // PART 1
     if (argc == 2) {
         for (const Movie& m : movies) {
             printMovieLine(m);
@@ -45,7 +44,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-  
+    // PART 2
     const string prefixFilename = argv[2];
     vector<string> prefixes;
     try {
@@ -69,6 +68,7 @@ int main(int argc, char* argv[]) {
     for (const string& prefix : prefixes) {
         auto it = lower_bound(movies.begin(), movies.end(), prefix, cmpMovieNameToKey);
 
+        // Buckets 0..100 for rating10, tie order stays alphabetical because we scan in name order
         vector<vector<const Movie*>> buckets(101);
 
         for (auto jt = it; jt != movies.end(); ++jt) {
@@ -91,7 +91,7 @@ int main(int argc, char* argv[]) {
 
         if (!any) {
             cout << "No movies found with prefix " << prefix << "\n";
-            continue; 
+            continue;
         }
 
         cout << "\n";
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
         const Movie* best = nullptr;
         for (int r = 100; r >= 0; --r) {
             if (!buckets[r].empty()) {
-                best = buckets[r][0];
+                best = buckets[r][0]; // alphabetical tie already
                 break;
             }
         }
@@ -109,10 +109,9 @@ int main(int argc, char* argv[]) {
     for (const auto& br : bestResults) {
         cout << "Best movie with prefix " << br.prefix
              << " is: " << br.bestMovie->name
-             << " with rating " << (br.bestMovie->rating10 / 10) << "." << (br.bestMovie->rating10 % 10)
+             << " with rating " << br.bestMovie->rating_out
              << "\n";
     }
 
     return 0;
 }
-

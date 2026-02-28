@@ -1,42 +1,54 @@
-// utilities.cpp  
 #include "utilities.h"
+
 #include <fstream>
 #include <stdexcept>
-#include <cctype>
-#include <cmath>     
 #include <string>
+#include <sstream>
+#include <iomanip>
+#include <cctype>
 
-static std::string trim(std::string s) {
+static std::string rtrim(std::string s) {
     while (!s.empty() && (s.back() == '\r' || s.back() == '\n' ||
                           s.back() == ' '  || s.back() == '\t')) {
         s.pop_back();
     }
+    return s;
+}
+
+static std::string ltrim(std::string s) {
     size_t i = 0;
     while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) i++;
     return s.substr(i);
 }
 
-static int parseRating10(const std::string& ratingStrRaw) {
-    std::string ratingStr = trim(ratingStrRaw);
+static std::string trim(std::string s) {
+    return ltrim(rtrim(std::move(s)));
+}
 
-    long double d = 0.0L;
-    try {
-        d = std::stold(ratingStr);
-    } catch (...) {
-        throw std::runtime_error("Bad rating value: " + ratingStr);
+static int ratingOutToRating10(const std::string& out) {
+    // out is guaranteed to be like "7.7" or "10.0" from ostringstream formatting
+    int whole = 0;
+    int frac = 0;
+    size_t i = 0;
+
+    while (i < out.size() && std::isdigit(static_cast<unsigned char>(out[i]))) {
+        whole = whole * 10 + (out[i] - '0');
+        i++;
     }
-
-    long long r10 = llround(d * 10.0L); 
-
+    if (i < out.size() && out[i] == '.') {
+        i++;
+        if (i < out.size() && std::isdigit(static_cast<unsigned char>(out[i]))) {
+            frac = out[i] - '0';
+        }
+    }
+    int r10 = whole * 10 + frac;
     if (r10 < 0) r10 = 0;
     if (r10 > 100) r10 = 100;
-
-    return static_cast<int>(r10);
+    return r10;
 }
 
 static Movie parseMovieLine(const std::string& lineRaw) {
-    std::string line = lineRaw;
-    if (!line.empty() && line.back() == '\r') line.pop_back();
+    std::string line = rtrim(lineRaw);
 
     std::size_t commaPos = line.rfind(',');
     if (commaPos == std::string::npos) {
@@ -44,10 +56,23 @@ static Movie parseMovieLine(const std::string& lineRaw) {
     }
 
     Movie m;
-    m.name = line.substr(0, commaPos);
+    m.name = trim(line.substr(0, commaPos));
 
-    std::string ratingStr = line.substr(commaPos + 1);
-    m.rating10 = parseRating10(ratingStr);
+    std::string ratingStr = trim(line.substr(commaPos + 1));
+
+    // Parse rating as long double, then format EXACTLY like reference output:
+    // fixed << setprecision(1)
+    long double d;
+    try {
+        d = std::stold(ratingStr);
+    } catch (...) {
+        throw std::runtime_error("Bad rating value: " + ratingStr);
+    }
+
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(1) << static_cast<long double>(d);
+    m.rating_out = oss.str();          // exact printable rating
+    m.rating10 = ratingOutToRating10(m.rating_out); // numeric key consistent with printed value
 
     return m;
 }
@@ -72,8 +97,8 @@ std::vector<std::string> readPrefixes(const std::string& filename) {
     std::vector<std::string> prefixes;
     std::string line;
     while (std::getline(in, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back(); // CRLF safe
-        prefixes.push_back(line); // keep whitespace inside prefix
+        line = rtrim(line);          // remove CRLF
+        prefixes.push_back(line);    // keep whitespace inside prefix intact
     }
     return prefixes;
 }
