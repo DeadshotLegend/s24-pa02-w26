@@ -1,6 +1,5 @@
-//Shivansh Goel
+// Shivansh Goel
 #include <iostream>
-#include <iomanip>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -12,27 +11,22 @@
 using namespace std;
 
 static void printMovieLine(const Movie& m) {
-    cout << m.name << ", " << fixed << setprecision(1) << m.rating << "\n";
+    cout << m.name << ", " << (m.rating10 / 10) << "." << (m.rating10 % 10) << "\n";
 }
 
 int main(int argc, char* argv[]) {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    /**************************************************************************
-     * CONSTANT / DECLARATION
-     **************************************************************************/
+   
     if (argc != 2 && argc != 3) {
-        // Spec doesn’t define error format; keep minimal.
         cerr << "Usage: ./runMovies movieFilename [prefixFilename]\n";
         return 1;
     }
 
     const string movieFilename = argv[1];
 
-    /**************************************************************************
-     * INITIALIZATION
-     **************************************************************************/
+   
     vector<Movie> movies;
     try {
         movies = readMoviesCSV(movieFilename);
@@ -41,12 +35,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Sort once by name (supports Part 1 and fast prefix searching).
     sortByName(movies);
 
-    /**************************************************************************
-     * PART 1
-     **************************************************************************/
+    
     if (argc == 2) {
         for (const Movie& m : movies) {
             printMovieLine(m);
@@ -54,9 +45,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    /**************************************************************************
-     * PART 2
-     **************************************************************************/
+  
     const string prefixFilename = argv[2];
     vector<string> prefixes;
     try {
@@ -66,7 +55,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Store best results (only for prefixes with >= 1 match) in input order.
     struct BestResult {
         string prefix;
         const Movie* bestMovie;
@@ -74,45 +62,54 @@ int main(int argc, char* argv[]) {
     vector<BestResult> bestResults;
     bestResults.reserve(prefixes.size());
 
-    // For lower_bound, compare Movie.name vs a string key.
     auto cmpMovieNameToKey = [](const Movie& m, const string& key) {
         return m.name < key;
     };
 
     for (const string& prefix : prefixes) {
-        // Find first position where name >= prefix
         auto it = lower_bound(movies.begin(), movies.end(), prefix, cmpMovieNameToKey);
 
-        vector<const Movie*> matches;
-        // Scan forward only while titles start with prefix
+        vector<vector<const Movie*>> buckets(101);
+
         for (auto jt = it; jt != movies.end(); ++jt) {
             if (!startsWith(jt->name, prefix)) break;
-            matches.push_back(&(*jt));
+
+            int r = jt->rating10;
+            if (r < 0) r = 0;
+            if (r > 100) r = 100;
+            buckets[r].push_back(&(*jt));
         }
 
-        if (matches.empty()) {
+        bool any = false;
+
+        for (int r = 100; r >= 0; --r) {
+            for (const Movie* mp : buckets[r]) {
+                printMovieLine(*mp);
+                any = true;
+            }
+        }
+
+        if (!any) {
             cout << "No movies found with prefix " << prefix << "\n";
-            continue; // NOTE: no blank line after "No movies found..."
+            continue; 
         }
 
-        // Sort matches by rating desc, name asc
-        sort(matches.begin(), matches.end(), betterForPrefixOutput);
+        cout << "\n";
 
-        // Print match block
-        for (const Movie* mp : matches) {
-            printMovieLine(*mp);
+        const Movie* best = nullptr;
+        for (int r = 100; r >= 0; --r) {
+            if (!buckets[r].empty()) {
+                best = buckets[r][0];
+                break;
+            }
         }
-        cout << "\n";  // blank line after successful match block
-
-        // Record best (first after sorting)
-        bestResults.push_back({prefix, matches.front()});
+        bestResults.push_back({prefix, best});
     }
 
-    // Print best movies at the very end
     for (const auto& br : bestResults) {
         cout << "Best movie with prefix " << br.prefix
              << " is: " << br.bestMovie->name
-             << " with rating " << fixed << setprecision(1) << br.bestMovie->rating
+             << " with rating " << (br.bestMovie->rating10 / 10) << "." << (br.bestMovie->rating10 % 10)
              << "\n";
     }
 

@@ -9,6 +9,6 @@ void sortByName(std::vector<Movie>& movies) {
 }
 
 bool betterForPrefixOutput(const Movie* a, const Movie* b) {
-    if (a->rating != b->rating) return a->rating > b->rating;
+    if (a->rating10 != b->rating10) return a->rating10 > b->rating10;
     return a->name < b->name;
 }

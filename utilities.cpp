@@ -1,6 +1,35 @@
+// utilities.cpp 
 #include "utilities.h"
 #include <fstream>
 #include <stdexcept>
+#include <cctype>
+
+static int parseRating10(std::string s) {
+    // Handle Windows line endings / trailing whitespace
+    while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ' || s.back() == '\t')) {
+        s.pop_back();
+    }
+
+    // Skip leading whitespace
+    size_t i = 0;
+    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) i++;
+
+    int whole = 0;
+    while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) {
+        whole = whole * 10 + (s[i] - '0');
+        i++;
+    }
+
+    int frac = 0;
+    if (i < s.size() && s[i] == '.') {
+        i++;
+        if (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) {
+            frac = s[i] - '0'; // only one decimal place needed
+        }
+    }
+
+    return whole * 10 + frac;
+}
 
 static Movie parseMovieLine(const std::string& line) {
     std::size_t commaPos = line.rfind(',');
@@ -10,8 +39,10 @@ static Movie parseMovieLine(const std::string& line) {
 
     Movie m;
     m.name = line.substr(0, commaPos);
+
     std::string ratingStr = line.substr(commaPos + 1);
-    m.rating = std::stod(ratingStr);
+    m.rating10 = parseRating10(ratingStr);
+
     return m;
 }
 
@@ -35,7 +66,8 @@ std::vector<std::string> readPrefixes(const std::string& filename) {
     std::vector<std::string> prefixes;
     std::string line;
     while (std::getline(in, line)) {
-        prefixes.push_back(line); // keep whitespace as part of prefix
+        if (!line.empty() && line.back() == '\r') line.pop_back(); // handle CRLF
+        prefixes.push_back(line);
     }
     return prefixes;
 }
