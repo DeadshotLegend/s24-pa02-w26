@@ -25,8 +25,35 @@ static std::string trim(std::string s) {
     return ltrim(rtrim(std::move(s)));
 }
 
+// ✅ MOVE THIS ABOVE parseMovieLine
+static std::string unquoteCSVField(std::string s) {
+    // Trim leading/trailing spaces/tabs and trailing CR
+    auto is_ws = [](unsigned char c){ return c == ' ' || c == '\t'; };
+
+    while (!s.empty() && is_ws((unsigned char)s.front())) s.erase(s.begin());
+    while (!s.empty() && (is_ws((unsigned char)s.back()) || s.back() == '\r')) s.pop_back();
+
+    // If field is quoted, strip quotes and unescape "" -> "
+    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
+        s = s.substr(1, s.size() - 2);
+
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size(); i++) {
+            if (s[i] == '"' && i + 1 < s.size() && s[i + 1] == '"') {
+                out.push_back('"');
+                i++; // skip second quote
+            } else {
+                out.push_back(s[i]);
+            }
+        }
+        return out;
+    }
+
+    return s;
+}
+
 static int ratingOutToRating10(const std::string& out) {
-    // out is guaranteed to be like "7.7" or "10.0" from ostringstream formatting
     int whole = 0;
     int frac = 0;
     size_t i = 0;
@@ -56,12 +83,9 @@ static Movie parseMovieLine(const std::string& lineRaw) {
     }
 
     Movie m;
-    m.name = trim(line.substr(0, commaPos));
-
+    m.name = unquoteCSVField(line.substr(0, commaPos));
     std::string ratingStr = trim(line.substr(commaPos + 1));
 
-    // Parse rating as long double, then format EXACTLY like reference output:
-    // fixed << setprecision(1)
     long double d;
     try {
         d = std::stold(ratingStr);
@@ -70,9 +94,10 @@ static Movie parseMovieLine(const std::string& lineRaw) {
     }
 
     std::ostringstream oss;
-    oss << std::fixed << std::setprecision(1) << static_cast<long double>(d);
-    m.rating_out = oss.str();          // exact printable rating
-    m.rating10 = ratingOutToRating10(m.rating_out); // numeric key consistent with printed value
+    oss << std::fixed << std::setprecision(1) << d;
+
+    m.rating_out = oss.str();
+    m.rating10 = ratingOutToRating10(m.rating_out);
 
     return m;
 }
@@ -97,8 +122,7 @@ std::vector<std::string> readPrefixes(const std::string& filename) {
     std::vector<std::string> prefixes;
     std::string line;
     while (std::getline(in, line)) {
-        line = rtrim(line);          // remove CRLF
-        prefixes.push_back(line);    // keep whitespace inside prefix intact
+        prefixes.push_back(rtrim(line)); // keep whitespace inside prefix intact
     }
     return prefixes;
 }
