@@ -12,8 +12,7 @@ using namespace std;
 
 static void printMovieLine(const Movie& m) {
     // Print EXACT rating string (formatted like fixed<<setprecision(1) at read time)
-    cout << m.name << ", " << m.rating_out << "\n";
-}
+cout << m.name << ", " << m.rating_out << "\n";}
 
 int main(int argc, char* argv[]) {
     ios::sync_with_stdio(false);
@@ -109,7 +108,7 @@ int main(int argc, char* argv[]) {
     for (const auto& br : bestResults) {
         cout << "Best movie with prefix " << br.prefix
              << " is: " << br.bestMovie->name
-             << " with rating " << br.bestMovie->rating_out
+             << " with rating " << br.bestMovie->rating_out 
              << "\n";
     }
 

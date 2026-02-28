@@ -5,14 +5,12 @@
 #include <vector>
 
 struct Movie {
-    std::string name;        
-    int rating10;            
-    std::string rating_out;  
+    std::string name;       
+    std::string rating_out; 
+    int rating10;           
 };
 
 void sortByName(std::vector<Movie>& movies);
-
-// Optional; not used by new main.cpp, but keep for completeness.
 bool betterForPrefixOutput(const Movie* a, const Movie* b);
 
 #endif

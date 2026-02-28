@@ -1,16 +1,13 @@
-// utilities.cpp — FINAL, robust for PA02 large dataset
 #include "utilities.h"
 
 #include <fstream>
 #include <stdexcept>
 #include <string>
-#include <sstream>
-#include <iomanip>
 #include <cctype>
 #include <vector>
 #include <algorithm>
 
-/* ------------------ helpers ------------------ */
+/* ---------- helpers ---------- */
 
 static inline bool is_ws(unsigned char c) {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
@@ -22,21 +19,20 @@ static std::string trim(std::string s) {
     return s;
 }
 
-// Remove ALL remaining double-quote characters from title
 static void removeAllDoubleQuotes(std::string& s) {
     s.erase(std::remove(s.begin(), s.end(), '"'), s.end());
 }
 
-// Unquote CSV field and unescape "" → "
-static std::string unquoteCSVField(std::string s) {
+// Strip outer quotes if present, unescape "" -> ", then remove stray quotes
+static std::string cleanTitle(std::string s) {
     s = trim(std::move(s));
 
-    // Strip outer quotes if present
+    // strip outer quotes
     if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
         s = s.substr(1, s.size() - 2);
     }
 
-    // Unescape doubled quotes
+    // unescape doubled quotes
     std::string out;
     out.reserve(s.size());
     for (size_t i = 0; i < s.size(); i++) {
@@ -47,29 +43,44 @@ static std::string unquoteCSVField(std::string s) {
             out.push_back(s[i]);
         }
     }
-    return out;
+
+    // remove any remaining " characters (dataset oddities)
+    removeAllDoubleQuotes(out);
+    return trim(std::move(out));
 }
 
-// Convert formatted rating string like "7.7" → 77
-static int ratingOutToRating10(const std::string& out) {
+// rating string -> numeric tenths for comparisons
+static int ratingStrToRating10(const std::string& s) {
+    // parse like: 6, 6.0, 6.7
     int whole = 0, frac = 0;
     size_t i = 0;
 
-    while (i < out.size() && std::isdigit((unsigned char)out[i])) {
-        whole = whole * 10 + (out[i] - '0');
+    while (i < s.size() && std::isdigit((unsigned char)s[i])) {
+        whole = whole * 10 + (s[i] - '0');
         i++;
     }
-    if (i < out.size() && out[i] == '.') {
+    if (i < s.size() && s[i] == '.') {
         i++;
-        if (i < out.size() && std::isdigit((unsigned char)out[i])) {
-            frac = out[i] - '0';
+        if (i < s.size() && std::isdigit((unsigned char)s[i])) {
+            frac = s[i] - '0';
         }
     }
-
     return whole * 10 + frac;
 }
 
-// Find LAST comma that is NOT inside quotes
+// Normalize rating for printing:
+// "6.0" -> "6", "6.7" -> "6.7", "10.0" -> "10"
+static std::string normalizeRatingOut(std::string r) {
+    r = trim(std::move(r));
+    // remove trailing zeros and trailing dot
+    if (r.find('.') != std::string::npos) {
+        while (!r.empty() && r.back() == '0') r.pop_back();
+        if (!r.empty() && r.back() == '.') r.pop_back();
+    }
+    return r;
+}
+
+// Find last comma outside quotes (robust on big dataset)
 static size_t find_last_comma_outside_quotes(const std::string& line) {
     bool inQuotes = false;
     size_t last = std::string::npos;
@@ -89,13 +100,9 @@ static size_t find_last_comma_outside_quotes(const std::string& line) {
     return last;
 }
 
-/* ------------------ parsing ------------------ */
-
 static Movie parseMovieLine(const std::string& rawLine) {
     std::string line = rawLine;
-    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
-        line.pop_back();
-    }
+    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
 
     size_t commaPos = find_last_comma_outside_quotes(line);
     if (commaPos == std::string::npos) {
@@ -106,28 +113,18 @@ static Movie parseMovieLine(const std::string& rawLine) {
     std::string ratingField = line.substr(commaPos + 1);
 
     Movie m;
-    m.name = unquoteCSVField(nameField);
-    removeAllDoubleQuotes(m.name);     // 🔥 FINAL FIX
-    m.name = trim(m.name);
+    m.name = cleanTitle(nameField);
 
-    std::string ratingStr = trim(ratingField);
+    // Keep rating formatting like expected output
+    m.rating_out = normalizeRatingOut(ratingField);
 
-    long double rating;
-    try {
-        rating = std::stold(ratingStr);
-    } catch (...) {
-        throw std::runtime_error("Bad rating value: " + ratingStr);
-    }
-
-    std::ostringstream oss;
-    oss << std::fixed << std::setprecision(1) << rating;
-    m.rating_out = oss.str();
-    m.rating10   = ratingOutToRating10(m.rating_out);
+    // Numeric key for sorting by rating desc
+    m.rating10 = ratingStrToRating10(m.rating_out);
 
     return m;
 }
 
-/* ------------------ API ------------------ */
+/* ---------- API ---------- */
 
 std::vector<Movie> readMoviesCSV(const std::string& filename) {
     std::ifstream in(filename);
@@ -136,9 +133,8 @@ std::vector<Movie> readMoviesCSV(const std::string& filename) {
     std::vector<Movie> movies;
     std::string line;
     while (std::getline(in, line)) {
-        if (!line.empty()) {
-            movies.push_back(parseMovieLine(line));
-        }
+        if (line.empty()) continue;
+        movies.push_back(parseMovieLine(line));
     }
     return movies;
 }
@@ -150,6 +146,7 @@ std::vector<std::string> readPrefixes(const std::string& filename) {
     std::vector<std::string> prefixes;
     std::string line;
     while (std::getline(in, line)) {
+        // keep internal whitespace, just trim ends / CRLF
         prefixes.push_back(trim(line));
     }
     return prefixes;
