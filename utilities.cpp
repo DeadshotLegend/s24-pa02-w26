@@ -1,4 +1,4 @@
-// utilities.cpp (FINAL - robust for large dataset)
+// utilities.cpp — FINAL, robust for PA02 large dataset
 #include "utilities.h"
 
 #include <fstream>
@@ -8,33 +8,35 @@
 #include <iomanip>
 #include <cctype>
 #include <vector>
+#include <algorithm>
 
-static inline bool is_ascii_ws(unsigned char c) {
+/* ------------------ helpers ------------------ */
+
+static inline bool is_ws(unsigned char c) {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
-static std::string trim_all(std::string s) {
-    while (!s.empty() && is_ascii_ws((unsigned char)s.front())) s.erase(s.begin());
-    while (!s.empty() && is_ascii_ws((unsigned char)s.back())) s.pop_back();
-
-    while (s.size() >= 2 &&
-           (unsigned char)s[0] == 0xC2 &&
-           (unsigned char)s[1] == 0xA0) {
-        s.erase(0, 2);
-        while (!s.empty() && is_ascii_ws((unsigned char)s.front())) s.erase(s.begin());
-    }
-
-    while (s.size() >= 2 &&
-           (unsigned char)s[s.size() - 2] == 0xC2 &&
-           (unsigned char)s[s.size() - 1] == 0xA0) {
-        s.erase(s.size() - 2, 2);
-        while (!s.empty() && is_ascii_ws((unsigned char)s.back())) s.pop_back();
-    }
-
+static std::string trim(std::string s) {
+    while (!s.empty() && is_ws((unsigned char)s.front())) s.erase(s.begin());
+    while (!s.empty() && is_ws((unsigned char)s.back()))  s.pop_back();
     return s;
 }
 
-static std::string unescape_doubled_quotes(const std::string& s) {
+// Remove ALL remaining double-quote characters from title
+static void removeAllDoubleQuotes(std::string& s) {
+    s.erase(std::remove(s.begin(), s.end(), '"'), s.end());
+}
+
+// Unquote CSV field and unescape "" → "
+static std::string unquoteCSVField(std::string s) {
+    s = trim(std::move(s));
+
+    // Strip outer quotes if present
+    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
+        s = s.substr(1, s.size() - 2);
+    }
+
+    // Unescape doubled quotes
     std::string out;
     out.reserve(s.size());
     for (size_t i = 0; i < s.size(); i++) {
@@ -48,44 +50,26 @@ static std::string unescape_doubled_quotes(const std::string& s) {
     return out;
 }
 
-static std::string unquoteCSVField(std::string s) {
-    s = trim_all(std::move(s));
-
-    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
-        s = s.substr(1, s.size() - 2);
-    }
-
-    s = unescape_doubled_quotes(s);
-    return trim_all(std::move(s));
-}
-
+// Convert formatted rating string like "7.7" → 77
 static int ratingOutToRating10(const std::string& out) {
-    int whole = 0;
-    int frac = 0;
+    int whole = 0, frac = 0;
     size_t i = 0;
 
-    while (i < out.size() && std::isdigit(static_cast<unsigned char>(out[i]))) {
+    while (i < out.size() && std::isdigit((unsigned char)out[i])) {
         whole = whole * 10 + (out[i] - '0');
         i++;
     }
     if (i < out.size() && out[i] == '.') {
         i++;
-        if (i < out.size() && std::isdigit(static_cast<unsigned char>(out[i]))) {
+        if (i < out.size() && std::isdigit((unsigned char)out[i])) {
             frac = out[i] - '0';
         }
     }
 
-    int r10 = whole * 10 + frac;
-    if (r10 < 0) r10 = 0;
-    if (r10 > 100) r10 = 100;
-    return r10;
+    return whole * 10 + frac;
 }
 
-// Find the last comma that is NOT inside quotes.
-// This is robust to:
-// - Proper CSV: "title, with comma",7.1
-// - Broken CSV:  title, with comma,7.1   (unquoted commas)
-// We assume the rating is after the final separator.
+// Find LAST comma that is NOT inside quotes
 static size_t find_last_comma_outside_quotes(const std::string& line) {
     bool inQuotes = false;
     size_t last = std::string::npos;
@@ -93,9 +77,8 @@ static size_t find_last_comma_outside_quotes(const std::string& line) {
     for (size_t i = 0; i < line.size(); i++) {
         char c = line[i];
         if (c == '"') {
-            // Toggle quotes, but skip doubled quotes inside a quoted field
             if (inQuotes && i + 1 < line.size() && line[i + 1] == '"') {
-                i++; // skip second quote
+                i++; // skip escaped quote
             } else {
                 inQuotes = !inQuotes;
             }
@@ -106,39 +89,45 @@ static size_t find_last_comma_outside_quotes(const std::string& line) {
     return last;
 }
 
-static Movie parseMovieLine(const std::string& lineRaw) {
-    std::string line = lineRaw;
-    // keep internal chars, just remove trailing newline-like stuff
-    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
+/* ------------------ parsing ------------------ */
+
+static Movie parseMovieLine(const std::string& rawLine) {
+    std::string line = rawLine;
+    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) {
+        line.pop_back();
+    }
 
     size_t commaPos = find_last_comma_outside_quotes(line);
     if (commaPos == std::string::npos) {
-        throw std::runtime_error("Bad CSV line (no separator comma): " + line);
+        throw std::runtime_error("Bad CSV line: " + line);
     }
 
     std::string nameField   = line.substr(0, commaPos);
     std::string ratingField = line.substr(commaPos + 1);
 
     Movie m;
-    m.name = unquoteCSVField(std::move(nameField));
+    m.name = unquoteCSVField(nameField);
+    removeAllDoubleQuotes(m.name);     // 🔥 FINAL FIX
+    m.name = trim(m.name);
 
-    std::string ratingStr = trim_all(std::move(ratingField));
+    std::string ratingStr = trim(ratingField);
 
-    long double d;
+    long double rating;
     try {
-        d = std::stold(ratingStr);
+        rating = std::stold(ratingStr);
     } catch (...) {
         throw std::runtime_error("Bad rating value: " + ratingStr);
     }
 
     std::ostringstream oss;
-    oss << std::fixed << std::setprecision(1) << d;
+    oss << std::fixed << std::setprecision(1) << rating;
     m.rating_out = oss.str();
-
-    m.rating10 = ratingOutToRating10(m.rating_out);
+    m.rating10   = ratingOutToRating10(m.rating_out);
 
     return m;
 }
+
+/* ------------------ API ------------------ */
 
 std::vector<Movie> readMoviesCSV(const std::string& filename) {
     std::ifstream in(filename);
@@ -147,8 +136,9 @@ std::vector<Movie> readMoviesCSV(const std::string& filename) {
     std::vector<Movie> movies;
     std::string line;
     while (std::getline(in, line)) {
-        if (line.empty()) continue;
-        movies.push_back(parseMovieLine(line));
+        if (!line.empty()) {
+            movies.push_back(parseMovieLine(line));
+        }
     }
     return movies;
 }
@@ -160,14 +150,14 @@ std::vector<std::string> readPrefixes(const std::string& filename) {
     std::vector<std::string> prefixes;
     std::string line;
     while (std::getline(in, line)) {
-        prefixes.push_back(trim_all(line));
+        prefixes.push_back(trim(line));
     }
     return prefixes;
 }
 
 bool startsWith(const std::string& s, const std::string& prefix) {
     if (prefix.size() > s.size()) return false;
-    for (std::size_t i = 0; i < prefix.size(); i++) {
+    for (size_t i = 0; i < prefix.size(); i++) {
         if (s[i] != prefix[i]) return false;
     }
     return true;
