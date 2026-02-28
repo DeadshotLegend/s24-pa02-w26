@@ -1,3 +1,4 @@
+// utilities.cpp 
 #include "utilities.h"
 
 #include <fstream>
@@ -6,6 +7,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cctype>
+#include <vector>
 
 static std::string rtrim(std::string s) {
     while (!s.empty() && (s.back() == '\r' || s.back() == '\n' ||
@@ -25,34 +27,33 @@ static std::string trim(std::string s) {
     return ltrim(rtrim(std::move(s)));
 }
 
-// ✅ MOVE THIS ABOVE parseMovieLine
+// Strip outer quotes if present, and ALWAYS unescape doubled quotes: "" -> "
 static std::string unquoteCSVField(std::string s) {
-    // Trim leading/trailing spaces/tabs and trailing CR
-    auto is_ws = [](unsigned char c){ return c == ' ' || c == '\t'; };
-
+    // trim spaces/tabs/CR
+    auto is_ws = [](unsigned char c){ return c == ' ' || c == '\t' || c == '\r'; };
     while (!s.empty() && is_ws((unsigned char)s.front())) s.erase(s.begin());
-    while (!s.empty() && (is_ws((unsigned char)s.back()) || s.back() == '\r')) s.pop_back();
+    while (!s.empty() && is_ws((unsigned char)s.back()))  s.pop_back();
 
-    // If field is quoted, strip quotes and unescape "" -> "
+    // strip outer ASCII quotes
     if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
         s = s.substr(1, s.size() - 2);
-
-        std::string out;
-        out.reserve(s.size());
-        for (size_t i = 0; i < s.size(); i++) {
-            if (s[i] == '"' && i + 1 < s.size() && s[i + 1] == '"') {
-                out.push_back('"');
-                i++; // skip second quote
-            } else {
-                out.push_back(s[i]);
-            }
-        }
-        return out;
     }
 
-    return s;
+    // unescape doubled quotes
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] == '"' && i + 1 < s.size() && s[i + 1] == '"') {
+            out.push_back('"');
+            i++;
+        } else {
+            out.push_back(s[i]);
+        }
+    }
+    return out;
 }
 
+// Convert formatted rating string like "7.7" or "10.0" to integer tenths (77, 100)
 static int ratingOutToRating10(const std::string& out) {
     int whole = 0;
     int frac = 0;
@@ -68,23 +69,54 @@ static int ratingOutToRating10(const std::string& out) {
             frac = out[i] - '0';
         }
     }
+
     int r10 = whole * 10 + frac;
     if (r10 < 0) r10 = 0;
     if (r10 > 100) r10 = 100;
     return r10;
 }
 
-static Movie parseMovieLine(const std::string& lineRaw) {
+// Split a CSV line into exactly 2 fields (name, rating) by finding the first comma not in quotes.
+// Handles quoted titles with commas and doubled quotes inside.
+static void splitTwoCSVFields(const std::string& lineRaw, std::string& field1, std::string& field2) {
     std::string line = rtrim(lineRaw);
 
-    std::size_t commaPos = line.rfind(',');
-    if (commaPos == std::string::npos) {
-        throw std::runtime_error("Bad CSV line (no comma): " + line);
+    bool inQuotes = false;
+    std::string a;
+    size_t i = 0;
+
+    for (; i < line.size(); i++) {
+        char c = line[i];
+
+        if (c == '"') {
+            // "" inside quotes means a literal quote
+            if (inQuotes && i + 1 < line.size() && line[i + 1] == '"') {
+                a.push_back('"');
+                i++; // skip second quote
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (c == ',' && !inQuotes) {
+            // separator between name and rating
+            i++; // skip comma
+            break;
+        } else {
+            a.push_back(c);
+        }
     }
 
+    field1 = a;
+    field2 = (i <= line.size()) ? line.substr(i) : "";
+}
+
+static Movie parseMovieLine(const std::string& lineRaw) {
+    std::string nameField, ratingField;
+    splitTwoCSVFields(lineRaw, nameField, ratingField);
+
     Movie m;
-    m.name = unquoteCSVField(line.substr(0, commaPos));
-    std::string ratingStr = trim(line.substr(commaPos + 1));
+    m.name = unquoteCSVField(nameField);
+
+    std::string ratingStr = trim(ratingField);
 
     long double d;
     try {
@@ -93,10 +125,12 @@ static Movie parseMovieLine(const std::string& lineRaw) {
         throw std::runtime_error("Bad rating value: " + ratingStr);
     }
 
+    // Format EXACTLY like the spec output: fixed, 1 decimal
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(1) << d;
-
     m.rating_out = oss.str();
+
+    // Make numeric key consistent with printed value
     m.rating10 = ratingOutToRating10(m.rating_out);
 
     return m;
