@@ -1,0 +1,149 @@
+a midwinter's tale, 7.5
+
+a midwinter's tale, 7.5
+antonia's line, 7.2
+angels and insects, 6.3
+ace ventura: when nature calls, 6.1
+assassins, 6.0
+across the sea of time, 3.5
+
+balto, 7.1
+bottle rocket, 6.8
+beautiful girls, 6.6
+babe, 6.0
+black sheep, 6.0
+broken arrow, 5.7
+bed of roses, 5.1
+bio-dome, 4.4
+big bully, 3.9
+
+casino, 7.8
+clueless, 6.9
+copycat, 6.5
+carrington, 6.4
+city hall, 6.0
+cutthroat island, 5.7
+
+dead man walking, 7.3
+dead presidents, 6.6
+dangerous minds, 6.4
+don't be a menace to south central while drinking your juice in the hood, 6.2
+dracula: dead and loving it, 5.7
+dunston checks in, 5.1
+
+eye for an eye, 5.8
+
+friday, 7.0
+from dusk till dawn, 6.9
+four rooms, 6.5
+french twist, 6.0
+father of the bride part ii, 5.7
+fair game, 4.1
+
+goldeneye, 6.6
+grumpier old men, 6.5
+get shorty, 6.4
+guardian angel, 6.3
+georgia, 6.1
+
+heat, 7.7
+heidi fleiss: hollywood madam, 6.8
+how to make an american quilt, 6.5
+home for the holidays, 6.3
+
+it takes two, 6.1
+
+jumanji, 6.9
+
+kicking and screaming, 7.0
+kids of the round table, 3.0
+
+la haine, 7.9
+lamerica, 7.7
+leaving las vegas, 7.1
+les miserables, 6.6
+lawnmower man 2: beyond cyberspace, 2.8
+last summer in the hamptons, 0.0
+
+mr. holland's opus, 6.9
+mighty aphrodite, 6.7
+mary reilly, 5.7
+money train, 5.4
+mortal kombat, 5.4
+
+nico icon, 7.3
+nixon, 7.1
+now and then, 6.6
+nick of time, 6.1
+
+othello, 7.0
+once upon a time... when we were colored, 4.5
+
+persuasion, 7.4
+pocahontas, 6.7
+powder, 6.3
+
+No movies found with prefix q
+richard iii, 6.9
+restoration, 6.3
+
+se7en, 8.1
+sense and sensibility, 7.2
+shanghai triad, 6.5
+sabrina, 6.2
+screamers, 6.1
+shopping, 5.6
+sudden death, 5.5
+
+the usual suspects, 8.1
+toy story, 7.7
+the city of lost children, 7.6
+the postman, 7.6
+the white balloon, 7.5
+twelve monkeys, 7.4
+the journey of august king, 6.7
+things to do in denver when you're dead, 6.7
+to die for, 6.7
+the american president, 6.5
+the confessional, 6.5
+the crossing guard, 6.1
+the indian in the cupboard, 5.9
+the juror, 5.5
+tom and huck, 5.4
+two bits, 5.4
+the big green, 5.2
+two if by sea, 4.5
+
+No movies found with prefix u
+vampire in brooklyn, 4.5
+
+wings of courage, 6.8
+white squall, 6.3
+waiting to exhale, 6.1
+when night is falling, 5.9
+
+No movies found with prefix x
+No movies found with prefix y
+No movies found with prefix z
+Best movie with prefix a m is: a midwinter's tale with rating 7.5
+Best movie with prefix a is: a midwinter's tale with rating 7.5
+Best movie with prefix b is: balto with rating 7.1
+Best movie with prefix c is: casino with rating 7.8
+Best movie with prefix d is: dead man walking with rating 7.3
+Best movie with prefix e is: eye for an eye with rating 5.8
+Best movie with prefix f is: friday with rating 7.0
+Best movie with prefix g is: goldeneye with rating 6.6
+Best movie with prefix h is: heat with rating 7.7
+Best movie with prefix i is: it takes two with rating 6.1
+Best movie with prefix j is: jumanji with rating 6.9
+Best movie with prefix k is: kicking and screaming with rating 7.0
+Best movie with prefix l is: la haine with rating 7.9
+Best movie with prefix m is: mr. holland's opus with rating 6.9
+Best movie with prefix n is: nico icon with rating 7.3
+Best movie with prefix o is: othello with rating 7.0
+Best movie with prefix p is: persuasion with rating 7.4
+Best movie with prefix r is: richard iii with rating 6.9
+Best movie with prefix s is: se7en with rating 8.1
+Best movie with prefix t is: the usual suspects with rating 8.1
+Best movie with prefix v is: vampire in brooklyn with rating 4.5
+Best movie with prefix w is: wings of courage with rating 6.8

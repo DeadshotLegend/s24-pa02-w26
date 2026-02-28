@@ -1,37 +1,43 @@
-// utilities.cpp 
+// utilities.cpp  
 #include "utilities.h"
 #include <fstream>
 #include <stdexcept>
 #include <cctype>
+#include <cmath>     
+#include <string>
 
-static int parseRating10(std::string s) {
-    // Handle Windows line endings / trailing whitespace
-    while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ' || s.back() == '\t')) {
+static std::string trim(std::string s) {
+    while (!s.empty() && (s.back() == '\r' || s.back() == '\n' ||
+                          s.back() == ' '  || s.back() == '\t')) {
         s.pop_back();
     }
-
-    // Skip leading whitespace
     size_t i = 0;
-    while (i < s.size() && std::isspace(static_cast<unsigned char>(s[i]))) i++;
-
-    int whole = 0;
-    while (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) {
-        whole = whole * 10 + (s[i] - '0');
-        i++;
-    }
-
-    int frac = 0;
-    if (i < s.size() && s[i] == '.') {
-        i++;
-        if (i < s.size() && std::isdigit(static_cast<unsigned char>(s[i]))) {
-            frac = s[i] - '0'; // only one decimal place needed
-        }
-    }
-
-    return whole * 10 + frac;
+    while (i < s.size() && (s[i] == ' ' || s[i] == '\t')) i++;
+    return s.substr(i);
 }
 
-static Movie parseMovieLine(const std::string& line) {
+static int parseRating10(const std::string& ratingStrRaw) {
+    std::string ratingStr = trim(ratingStrRaw);
+
+    long double d = 0.0L;
+    try {
+        d = std::stold(ratingStr);
+    } catch (...) {
+        throw std::runtime_error("Bad rating value: " + ratingStr);
+    }
+
+    long long r10 = llround(d * 10.0L); 
+
+    if (r10 < 0) r10 = 0;
+    if (r10 > 100) r10 = 100;
+
+    return static_cast<int>(r10);
+}
+
+static Movie parseMovieLine(const std::string& lineRaw) {
+    std::string line = lineRaw;
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+
     std::size_t commaPos = line.rfind(',');
     if (commaPos == std::string::npos) {
         throw std::runtime_error("Bad CSV line (no comma): " + line);
@@ -66,8 +72,8 @@ std::vector<std::string> readPrefixes(const std::string& filename) {
     std::vector<std::string> prefixes;
     std::string line;
     while (std::getline(in, line)) {
-        if (!line.empty() && line.back() == '\r') line.pop_back(); // handle CRLF
-        prefixes.push_back(line);
+        if (!line.empty() && line.back() == '\r') line.pop_back(); // CRLF safe
+        prefixes.push_back(line); // keep whitespace inside prefix
     }
     return prefixes;
 }
