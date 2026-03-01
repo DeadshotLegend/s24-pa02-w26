@@ -1,7 +1,6 @@
 // Shivansh Goel - CS24 PA02
 
 #include <algorithm>
-#include <exception>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -11,13 +10,19 @@
 
 using namespace std;
 
+// Local startsWith so we don't depend on utilities.h declaring it
+static inline bool startsWithLocal(const string& s, const string& prefix) {
+    if (prefix.size() > s.size()) return false;
+    for (size_t i = 0; i < prefix.size(); i++) {
+        if (s[i] != prefix[i]) return false;
+    }
+    return true;
+}
+
 int main(int argc, char* argv[]) {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
 
-    /**************************************************************************
-     * CONSTANT / DECLARATION
-     **************************************************************************/
     if (argc != 2 && argc != 3) {
         cerr << "Usage: ./runMovies movieFilename [prefixFilename]\n";
         return 1;
@@ -25,101 +30,84 @@ int main(int argc, char* argv[]) {
 
     const string movieFilename = argv[1];
 
-    /**************************************************************************
-     * INITIALIZATION
-     **************************************************************************/
     vector<Movie> movies;
-    try {
-        movies = readMoviesCSV(movieFilename);
-    } catch (const exception& e) {
-        cerr << e.what() << "\n";
-        return 1;
-    }
+    movies = readMoviesCSV(movieFilename);
 
-    // Part 1 requires alphabetical order by the *printed* movie name.
+    // Part 1: alphabetical order by movie name (use the printable name field)
     sortByName(movies);
 
-    /**************************************************************************
-     * PART 1
-     **************************************************************************/
+    // =========================
+    // Part 1
+    // =========================
     if (argc == 2) {
         for (const Movie& m : movies) {
-            cout << m.print_name << ", " << m.rating_out << "\n";
+            cout << m.name << ", " << m.rating_out << "\n";
         }
         return 0;
     }
 
-    /**************************************************************************
-     * PART 2
-     **************************************************************************/
+    // =========================
+    // Part 2
+    // =========================
     const string prefixFilename = argv[2];
-
-    vector<string> prefixes;
-    try {
-        prefixes = readPrefixes(prefixFilename);
-    } catch (const exception& e) {
-        cerr << e.what() << "\n";
-        return 1;
-    }
+    vector<string> prefixes = readPrefixes(prefixFilename);
 
     struct BestResult {
         string prefix;
-        const Movie* bestMovie;
+        const Movie* best;
     };
 
     vector<BestResult> bestResults;
     bestResults.reserve(prefixes.size());
 
-    // lower_bound comparator: compare Movie.print_name to prefix key
+    // lower_bound comparator: compare Movie.name to prefix key
     auto cmpMovieToKey = [](const Movie& m, const string& key) {
-        return m.print_name < key;
+        return m.name < key;
     };
 
-    bool printedAnyMatchBlock = false;
+    bool printedAnySuccessfulBlock = false;
 
     for (const string& prefix : prefixes) {
         auto it = lower_bound(movies.begin(), movies.end(), prefix, cmpMovieToKey);
 
         vector<const Movie*> matches;
-        matches.reserve(64);
+        matches.reserve(32);
 
         for (auto jt = it; jt != movies.end(); ++jt) {
-            if (!startsWith(jt->print_name, prefix)) break;
+            if (!startsWithLocal(jt->name, prefix)) break;
             matches.push_back(&(*jt));
         }
 
         if (matches.empty()) {
-            // IMPORTANT: exact wording, and NO blank line after this message.
             cout << "No movies found with prefix " << prefix << "\n";
-            continue;
+            continue; // no blank line after this
         }
 
-        // Sort matches by rating desc, then name asc (using print_name)
-        sort(matches.begin(), matches.end(), betterForPrefixOutput);
+        // Sort by rating desc (rating10), then name asc
+        sort(matches.begin(), matches.end(),
+             [](const Movie* a, const Movie* b) {
+                 if (a->rating10 != b->rating10) return a->rating10 > b->rating10;
+                 return a->name < b->name;
+             });
 
-        // IMPORTANT formatting:
-        // - One blank line BETWEEN successful match blocks
-        // - No extra blank line immediately after the last block
-        if (printedAnyMatchBlock) cout << "\n";
-        printedAnyMatchBlock = true;
+        // Blank line BETWEEN successful blocks only
+        if (printedAnySuccessfulBlock) cout << "\n";
+        printedAnySuccessfulBlock = true;
 
         for (const Movie* mp : matches) {
-            cout << mp->print_name << ", " << mp->rating_out << "\n";
+            cout << mp->name << ", " << mp->rating_out << "\n";
         }
 
         bestResults.push_back({prefix, matches.front()});
     }
 
-    // IMPORTANT formatting:
-    // - Best-movie lines are at the END
-    // - The examples show one blank line before the best section (after the last match block),
-    //   but NOT after any "No movies found..." lines.
-    if (!bestResults.empty() && printedAnyMatchBlock) cout << "\n";
+    // Exactly one blank line before Best section if we printed any successful block
+    if (printedAnySuccessfulBlock && !bestResults.empty()) cout << "\n";
 
     for (const auto& br : bestResults) {
         cout << "Best movie with prefix " << br.prefix
-             << " is: " << br.bestMovie->print_name
-             << " with rating " << br.bestMovie->rating_out
+             << " is: " << br.best->name
+             << " with rating " << br.best->rating_out
              << "\n";
     }
 
@@ -129,43 +117,23 @@ int main(int argc, char* argv[]) {
 /******************************************************************************
  * PART 3a: Time Complexity (Worst Case)
  *
- * Data structure/algorithm used for Part 2:
- *   - Movies stored in a vector and sorted once by print_name.
- *   - For each prefix:
- *       1) lower_bound on sorted vector to find first candidate.
- *       2) scan forward while titles start with prefix, collecting up to k matches.
- *       3) sort the k matches by rating desc, then name asc.
+ * n = number of movies, m = number of prefixes, k = max matches per prefix,
+ * l = max title/prefix length
  *
- * Let:
- *   n = number of movies
- *   m = number of prefixes
- *   k = max number of movies that match a prefix
- *   l = max length of a movie name / prefix (string comparisons)
+ * For each prefix:
+ *   lower_bound: O(log n * l)
+ *   scan matches: O(k * l)
+ *   sort matches: O(k log k * l)
  *
- * Worst-case time for Part 2:
- *   For each prefix:
- *     lower_bound: O(log n * l)
- *     scanning:    O(k * l)
- *     sort k:      O(k log k) comparisons, each O(l) => O(k log k * l)
- *
- * Total: O( m * (log n * l + k * l + k log k * l) )
- *      = O( m * (log n + k + k log k) * l )
+ * Total: O(m * (log n + k + k log k) * l)
  *
  * PART 3b: Space Complexity (Worst Case)
- *
- *   - Store n movies (names up to length l): O(n*l)
- *   - Store m prefixes (length up to l): O(m*l)
- *   - For a single prefix, store up to k pointers in matches: O(k)
- *   - Store up to m best results (prefix + pointer): O(m*l + m)
- *
+ *   movies: O(n*l)
+ *   prefixes: O(m*l)
+ *   matches: O(k)
+ *   bestResults: O(m)
  * Total: O(n*l + m*l + k)
  *
- * PART 3c: Time/Space Tradeoffs
- *
- * Designed primarily for low time complexity with moderate space:
- *   - Sort once to enable binary search per prefix.
- *   - Only store pointers for matches per prefix (O(k) extra).
- * Tradeoff:
- *   - Need per-prefix sorting of matches to meet required output ordering,
- *     which dominates when k is large.
+ * PART 3c: Tradeoffs
+ *   Optimized for time using sorting + binary search per prefix.
  ******************************************************************************/
