@@ -1,6 +1,8 @@
-// Shivansh Goel - CS24 PA02
+// main.cpp
+// Shivansh Goel
 
 #include <algorithm>
+#include <exception>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -10,13 +12,18 @@
 
 using namespace std;
 
-// Local startsWith so we don't depend on utilities.h declaring it
-static inline bool startsWithLocal(const string& s, const string& prefix) {
-    if (prefix.size() > s.size()) return false;
-    for (size_t i = 0; i < prefix.size(); i++) {
-        if (s[i] != prefix[i]) return false;
+static string escapeQuotesForOutput(const string& s) {
+    string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        if (c == '"') out += "\"\"";
+        else out += c;
     }
-    return true;
+    return out;
+}
+
+static void printMovieLine(const Movie& m) {
+    cout << escapeQuotesForOutput(m.name) << ", " << m.rating_out << "\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -31,83 +38,91 @@ int main(int argc, char* argv[]) {
     const string movieFilename = argv[1];
 
     vector<Movie> movies;
-    movies = readMoviesCSV(movieFilename);
+    try {
+        movies = readMoviesCSV(movieFilename);
+    } catch (const exception& e) {
+        cerr << e.what() << "\n";
+        return 1;
+    }
 
-    // Part 1: alphabetical order by movie name (use the printable name field)
     sortByName(movies);
 
-    // =========================
-    // Part 1
-    // =========================
+    // ----------------
+    // PART 1
+    // ----------------
     if (argc == 2) {
         for (const Movie& m : movies) {
-            cout << m.name << ", " << m.rating_out << "\n";
+            printMovieLine(m);
         }
         return 0;
     }
 
-    // =========================
-    // Part 2
-    // =========================
+    // ----------------
+    // PART 2
+    // ----------------
     const string prefixFilename = argv[2];
-    vector<string> prefixes = readPrefixes(prefixFilename);
+    vector<string> prefixes;
+    try {
+        prefixes = readPrefixes(prefixFilename);
+    } catch (const exception& e) {
+        cerr << e.what() << "\n";
+        return 1;
+    }
 
     struct BestResult {
         string prefix;
-        const Movie* best;
+        const Movie* bestMovie;
     };
-
     vector<BestResult> bestResults;
     bestResults.reserve(prefixes.size());
 
-    // lower_bound comparator: compare Movie.name to prefix key
-    auto cmpMovieToKey = [](const Movie& m, const string& key) {
+    auto cmpMovieNameToKey = [](const Movie& m, const string& key) {
         return m.name < key;
     };
 
-    bool printedAnySuccessfulBlock = false;
-
     for (const string& prefix : prefixes) {
-        auto it = lower_bound(movies.begin(), movies.end(), prefix, cmpMovieToKey);
+        auto it = lower_bound(movies.begin(), movies.end(), prefix, cmpMovieNameToKey);
 
-        vector<const Movie*> matches;
-        matches.reserve(32);
+        vector<const Movie*> buckets[101];
+
+        const Movie* bestMovie = nullptr;
+        int bestRating10 = -1;
 
         for (auto jt = it; jt != movies.end(); ++jt) {
-            if (!startsWithLocal(jt->name, prefix)) break;
-            matches.push_back(&(*jt));
+            if (!startsWith(jt->name, prefix)) break;
+
+            int r = jt->rating10;
+            if (r < 0) r = 0;
+            if (r > 100) r = 100;
+
+            buckets[r].push_back(&(*jt));
+
+            if (r > bestRating10) {
+                bestRating10 = r;
+                bestMovie = &(*jt);
+            }
         }
 
-        if (matches.empty()) {
+        if (bestMovie == nullptr) {
             cout << "No movies found with prefix " << prefix << "\n";
-            continue; // no blank line after this
+            continue;
         }
 
-        // Sort by rating desc (rating10), then name asc
-        sort(matches.begin(), matches.end(),
-             [](const Movie* a, const Movie* b) {
-                 if (a->rating10 != b->rating10) return a->rating10 > b->rating10;
-                 return a->name < b->name;
-             });
-
-        // Blank line BETWEEN successful blocks only
-        if (printedAnySuccessfulBlock) cout << "\n";
-        printedAnySuccessfulBlock = true;
-
-        for (const Movie* mp : matches) {
-            cout << mp->name << ", " << mp->rating_out << "\n";
+        // ✅ FIX: use printMovieLine so quotes get escaped correctly
+        for (int r = 100; r >= 0; --r) {
+            for (const Movie* mp : buckets[r]) {
+                printMovieLine(*mp);
+            }
         }
+        cout << "\n";
 
-        bestResults.push_back({prefix, matches.front()});
+        bestResults.push_back({prefix, bestMovie});
     }
-
-    // Exactly one blank line before Best section if we printed any successful block
-    if (printedAnySuccessfulBlock && !bestResults.empty()) cout << "\n";
 
     for (const auto& br : bestResults) {
         cout << "Best movie with prefix " << br.prefix
-             << " is: " << br.best->name
-             << " with rating " << br.best->rating_out
+             << " is: " << escapeQuotesForOutput(br.bestMovie->name)
+             << " with rating " << br.bestMovie->rating_out
              << "\n";
     }
 
