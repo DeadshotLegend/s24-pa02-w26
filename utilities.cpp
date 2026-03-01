@@ -1,57 +1,51 @@
 #include "utilities.h"
 
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <stdexcept>
 #include <string>
-#include <cctype>
 #include <vector>
-#include <algorithm>
 
 /* ---------- helpers ---------- */
 
-static inline bool is_ws(unsigned char c) {
-    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
-}
-
-static std::string trim(std::string s) {
-    while (!s.empty() && is_ws((unsigned char)s.front())) s.erase(s.begin());
-    while (!s.empty() && is_ws((unsigned char)s.back()))  s.pop_back();
+static std::string rstrip_cr(std::string s) {
+    if (!s.empty() && s.back() == '\r') s.pop_back();
     return s;
 }
 
-static void removeAllDoubleQuotes(std::string& s) {
-    s.erase(std::remove(s.begin(), s.end(), '"'), s.end());
+static std::string trim_edges_ws_crlf(std::string s) {
+    auto is_ws = [](unsigned char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+    while (!s.empty() && is_ws((unsigned char)s.front())) s.erase(s.begin());
+    while (!s.empty() && is_ws((unsigned char)s.back())) s.pop_back();
+    return s;
 }
 
-// Strip outer quotes if present, unescape "" -> ", then remove stray quotes
-static std::string cleanTitle(std::string s) {
-    s = trim(std::move(s));
+// Unquote ONLY if the entire field is wrapped in quotes, and unescape "" -> "
+static std::string unquoteCSVField(std::string s) {
+    s = trim_edges_ws_crlf(std::move(s));
 
-    // strip outer quotes
     if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
         s = s.substr(1, s.size() - 2);
-    }
 
-    // unescape doubled quotes
-    std::string out;
-    out.reserve(s.size());
-    for (size_t i = 0; i < s.size(); i++) {
-        if (s[i] == '"' && i + 1 < s.size() && s[i + 1] == '"') {
-            out.push_back('"');
-            i++;
-        } else {
-            out.push_back(s[i]);
+        std::string out;
+        out.reserve(s.size());
+        for (size_t i = 0; i < s.size(); i++) {
+            if (s[i] == '"' && i + 1 < s.size() && s[i + 1] == '"') {
+                out.push_back('"');
+                i++;
+            } else {
+                out.push_back(s[i]);
+            }
         }
+        return out;
     }
 
-    // remove any remaining " characters (dataset oddities)
-    removeAllDoubleQuotes(out);
-    return trim(std::move(out));
+    return s;
 }
 
-// rating string -> numeric tenths for comparisons
+// rating string -> numeric tenths for comparisons (0..100)
 static int ratingStrToRating10(const std::string& s) {
-    // parse like: 6, 6.0, 6.7
     int whole = 0, frac = 0;
     size_t i = 0;
 
@@ -65,14 +59,12 @@ static int ratingStrToRating10(const std::string& s) {
             frac = s[i] - '0';
         }
     }
-    return whole * 10 + frac;
+    return whole * 10 + frac; // e.g., 8.1 -> 81
 }
 
-// Normalize rating for printing:
-// "6.0" -> "6", "6.7" -> "6.7", "10.0" -> "10"
+// Normalize rating for printing: "6.0"->"6", keep "6.7", keep "0"
 static std::string normalizeRatingOut(std::string r) {
-    r = trim(std::move(r));
-    // remove trailing zeros and trailing dot
+    r = trim_edges_ws_crlf(std::move(r));
     if (r.find('.') != std::string::npos) {
         while (!r.empty() && r.back() == '0') r.pop_back();
         if (!r.empty() && r.back() == '.') r.pop_back();
@@ -80,7 +72,7 @@ static std::string normalizeRatingOut(std::string r) {
     return r;
 }
 
-// Find last comma outside quotes (robust on big dataset)
+// Find last comma not inside quoted CSV region
 static size_t find_last_comma_outside_quotes(const std::string& line) {
     bool inQuotes = false;
     size_t last = std::string::npos;
@@ -113,13 +105,11 @@ static Movie parseMovieLine(const std::string& rawLine) {
     std::string ratingField = line.substr(commaPos + 1);
 
     Movie m;
-    m.name = cleanTitle(nameField);
+    m.name = unquoteCSVField(std::move(nameField));     // preserves internal quotes
+    m.name = trim_edges_ws_crlf(std::move(m.name));     // trim edges only
 
-    // Keep rating formatting like expected output
-    m.rating_out = normalizeRatingOut(ratingField);
-
-    // Numeric key for sorting by rating desc
-    m.rating10 = ratingStrToRating10(m.rating_out);
+    m.rating_out = normalizeRatingOut(std::move(ratingField));
+    m.rating10   = ratingStrToRating10(m.rating_out);
 
     return m;
 }
@@ -139,6 +129,8 @@ std::vector<Movie> readMoviesCSV(const std::string& filename) {
     return movies;
 }
 
+// IMPORTANT: Do NOT trim spaces—prefixes may include whitespace.
+// Only remove trailing CR from Windows line endings.
 std::vector<std::string> readPrefixes(const std::string& filename) {
     std::ifstream in(filename);
     if (!in) throw std::runtime_error("Could not open prefix file: " + filename);
@@ -146,8 +138,7 @@ std::vector<std::string> readPrefixes(const std::string& filename) {
     std::vector<std::string> prefixes;
     std::string line;
     while (std::getline(in, line)) {
-        // keep internal whitespace, just trim ends / CRLF
-        prefixes.push_back(trim(line));
+        prefixes.push_back(rstrip_cr(line));
     }
     return prefixes;
 }
