@@ -80,26 +80,26 @@ int main(int argc, char* argv[]) {
     };
 
     for (const string& prefix : prefixes) {
-        // Find first position where name >= prefix
         auto it = lower_bound(movies.begin(), movies.end(), prefix, cmpMovieNameToKey);
 
-        // Bucket movies by rating10 (0..50 for 0.0..5.0)
-        vector<const Movie*> buckets[51];
+        // Ratings are in tenths; support 0.0 .. 10.0 => 0..100
+        vector<const Movie*> buckets[101];
 
         const Movie* bestMovie = nullptr;
         int bestRating10 = -1;
 
-        // Scan forward only while titles start with prefix
+        // Scan forward while titles match prefix (contiguous in name-sorted order)
         for (auto jt = it; jt != movies.end(); ++jt) {
             if (!startsWith(jt->name, prefix)) break;
 
-            int r = jt->rating10;             // 0..50
+            int r = jt->rating10;   // expected 0..100
             if (r < 0) r = 0;
-            if (r > 50) r = 50;
+            if (r > 100) r = 100;
 
-            buckets[r].push_back(&(*jt));     // preserves alphabetical order within same rating
+            // preserves alphabetical order within the same rating (since scan is name-sorted)
+            buckets[r].push_back(&(*jt));
 
-            // Best movie: higher rating wins; tie breaks by alphabetical (first seen in name-sorted scan)
+            // Best movie: higher rating wins; ties -> alphabetically first (first seen)
             if (r > bestRating10) {
                 bestRating10 = r;
                 bestMovie = &(*jt);
@@ -108,16 +108,16 @@ int main(int argc, char* argv[]) {
 
         if (bestMovie == nullptr) {
             cout << "No movies found with prefix " << prefix << "\n";
-            continue; // no blank line after "No movies found..."
+            continue;
         }
 
         // Print in decreasing rating; within bucket already alphabetical
-        for (int r = 50; r >= 0; --r) {
+        for (int r = 100; r >= 0; --r) {
             for (const Movie* mp : buckets[r]) {
                 cout << mp->name << ", " << mp->rating_out << "\n";
             }
         }
-        cout << "\n"; // blank line after successful match block
+        cout << "\n";
 
         bestResults.push_back({prefix, bestMovie});
     }
@@ -136,52 +136,31 @@ int main(int argc, char* argv[]) {
 /******************************************************************************
  * PART 3a: Time Complexity (Worst Case) — Part 2 ONLY
  *
- * Data structure/algorithm used for Part 2:
- *   - Movies stored in a vector and sorted once by name.
- *   - For each prefix:
- *       1) lower_bound to find the first candidate.
- *       2) scan forward to collect all matches (contiguous in name-sorted order).
- *       3) bucket matches by rating (0.0–5.0 in tenths => 51 buckets) and print from high to low.
- *
  * Let:
- *   n = number of movies in the dataset
+ *   n = number of movies
  *   m = number of prefixes
- *   k = maximum number of movies that match a prefix
- *   l = maximum length of a movie name
+ *   k = max number of movies matching a prefix
+ *   l = max length of a movie name
+ *
+ * Movies are pre-sorted by name once (outside Part 2).
  *
  * For each prefix:
- *   - lower_bound: O(log n * l)  (string comparisons)
- *   - scan matches: O(k * l)     (startsWith checks + comparisons)
- *   - bucketing/printing: O(k)   (each match goes into exactly one bucket)
+ *   - lower_bound: O(log n * l)
+ *   - scan matches: O(k * l)
+ *   - bucket print: O(k)
  *
- * Worst-case time for Part 2:
- *   O( m * (log n * l + k * l + k) )
- * = O( m * (log n + k) * l )   (dominant terms)
- *
- * NOTE: Output (I/O) time can dominate in practice because many lines may be printed.
+ * Worst-case Part 2 time:
+ *   O( m * (log n + k) * l )
  *
  * PART 3b: Space Complexity (Worst Case) — Part 2 ONLY
+ *   - movies storage: O(n*l)
+ *   - prefixes storage: O(m*l)
+ *   - per prefix buckets store k pointers total: O(k)
+ *   - bestResults: O(m)
  *
- *   - Movies stored: O(n * l) overall storage for titles
- *   - Prefixes stored: O(m * l)
- *   - Per prefix: buckets store up to k pointers total: O(k)
- *   - Best results: up to m pointers + prefix strings: O(m * l)
+ * Total: O(n*l + m*l + k)
  *
- * Worst-case total: O(n*l + m*l + k)
- *
- * PART 3c: Time/Space Tradeoffs
- *
- * Goal:
- *   Prioritize low time complexity while keeping space reasonable.
- *
- * Approach:
- *   Sorting movies once enables fast prefix searches via binary search + linear scan over only
- *   the matching range. To satisfy required output order (rating desc, then name asc) efficiently,
- *   we avoid sorting k matches and instead bucket by rating (51 buckets), which runs in O(k).
- *
- * Tradeoff:
- *   We use O(k) extra pointer storage per prefix for buckets to reduce time from O(k log k)
- *   (sorting matches) down to O(k). Low time complexity was harder to achieve than low space
- *   complexity because output ordering constraints can force expensive per-prefix work unless
- *   carefully optimized.
+ * PART 3c: Tradeoffs
+ *   Optimized for time by avoiding per-prefix sort (O(k log k)).
+ *   We use 101 small buckets (0..10.0 in tenths) to output in required order in O(k).
  ******************************************************************************/
