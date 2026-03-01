@@ -11,11 +11,19 @@
 #include "utilities.h"
 
 using namespace std;
-
-static void printMovieLine(const Movie& m) {
-    cout << m.name << ", " << m.rating_out << "\n";
+static string escapeQuotesForOutput(const string& s) {
+    string out;
+    out.reserve(s.size());
+    for (char c : s) {
+        if (c == '"') out += "\"\"";
+        else out += c;
+    }
+    return out;
 }
 
+static void printMovieLine(const Movie& m) {
+    cout << escapeQuotesForOutput(m.name) << ", " << m.rating_out << "\n";
+}
 int main(int argc, char* argv[]) {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
@@ -124,10 +132,10 @@ int main(int argc, char* argv[]) {
 
     // Print best movies at the very end
     for (const auto& br : bestResults) {
-        cout << "Best movie with prefix " << br.prefix
-             << " is: " << br.bestMovie->name
-             << " with rating " << br.bestMovie->rating_out
-             << "\n";
+       cout << "Best movie with prefix " << br.prefix
+     << " is: " << escapeQuotesForOutput(br.bestMovie->name)
+     << " with rating " << br.bestMovie->rating_out
+     << "\n"; 
     }
 
     return 0;

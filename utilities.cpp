@@ -1,50 +1,33 @@
 #include "utilities.h"
 
-#include <algorithm>
-#include <cctype>
 #include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-/* ---------- helpers ---------- */
-
-static std::string rstrip_cr(std::string s) {
-    if (!s.empty() && s.back() == '\r') s.pop_back();
-    return s;
+// Remove only trailing CR/LF characters
+static void rstrip_newlines(std::string& s) {
+    while (!s.empty() && (s.back() == '\r' || s.back() == '\n')) s.pop_back();
 }
 
-static std::string trim_edges_ws_crlf(std::string s) {
-    auto is_ws = [](unsigned char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
-    while (!s.empty() && is_ws((unsigned char)s.front())) s.erase(s.begin());
-    while (!s.empty() && is_ws((unsigned char)s.back())) s.pop_back();
-    return s;
-}
+// Normalize rating for printing: "6.0"->"6", keep "6.7", keep "0"
+static std::string normalizeRatingOut(std::string r) {
+    rstrip_newlines(r);
 
-// Unquote ONLY if the entire field is wrapped in quotes, and unescape "" -> "
-static std::string unquoteCSVField(std::string s) {
-    s = trim_edges_ws_crlf(std::move(s));
+    // trim spaces/tabs around rating (safe)
+    while (!r.empty() && (r.front() == ' ' || r.front() == '\t')) r.erase(r.begin());
+    while (!r.empty() && (r.back() == ' ' || r.back() == '\t')) r.pop_back();
 
-    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') {
-        s = s.substr(1, s.size() - 2);
-
-        std::string out;
-        out.reserve(s.size());
-        for (size_t i = 0; i < s.size(); i++) {
-            if (s[i] == '"' && i + 1 < s.size() && s[i + 1] == '"') {
-                out.push_back('"');
-                i++;
-            } else {
-                out.push_back(s[i]);
-            }
-        }
-        return out;
+    // drop trailing .0
+    auto dot = r.find('.');
+    if (dot != std::string::npos) {
+        while (!r.empty() && r.back() == '0') r.pop_back();
+        if (!r.empty() && r.back() == '.') r.pop_back();
     }
-
-    return s;
+    return r;
 }
 
-// rating string -> numeric tenths for comparisons (0..100)
+// rating string like "8.1" -> 81, "0" -> 0
 static int ratingStrToRating10(const std::string& s) {
     int whole = 0, frac = 0;
     size_t i = 0;
@@ -59,62 +42,27 @@ static int ratingStrToRating10(const std::string& s) {
             frac = s[i] - '0';
         }
     }
-    return whole * 10 + frac; // e.g., 8.1 -> 81
+    return whole * 10 + frac;
 }
 
-// Normalize rating for printing: "6.0"->"6", keep "6.7", keep "0"
-static std::string normalizeRatingOut(std::string r) {
-    r = trim_edges_ws_crlf(std::move(r));
-    if (r.find('.') != std::string::npos) {
-        while (!r.empty() && r.back() == '0') r.pop_back();
-        if (!r.empty() && r.back() == '.') r.pop_back();
-    }
-    return r;
-}
+static Movie parseMovieLine(std::string line) {
+    rstrip_newlines(line);
 
-// Find last comma not inside quoted CSV region
-static size_t find_last_comma_outside_quotes(const std::string& line) {
-    bool inQuotes = false;
-    size_t last = std::string::npos;
-
-    for (size_t i = 0; i < line.size(); i++) {
-        char c = line[i];
-        if (c == '"') {
-            if (inQuotes && i + 1 < line.size() && line[i + 1] == '"') {
-                i++; // skip escaped quote
-            } else {
-                inQuotes = !inQuotes;
-            }
-        } else if (c == ',' && !inQuotes) {
-            last = i;
-        }
-    }
-    return last;
-}
-
-static Movie parseMovieLine(const std::string& rawLine) {
-    std::string line = rawLine;
-    while (!line.empty() && (line.back() == '\r' || line.back() == '\n')) line.pop_back();
-
-    size_t commaPos = find_last_comma_outside_quotes(line);
+    // rating is always after the LAST comma
+    size_t commaPos = line.rfind(',');
     if (commaPos == std::string::npos) {
         throw std::runtime_error("Bad CSV line: " + line);
     }
 
-    std::string nameField   = line.substr(0, commaPos);
+    Movie m;
+    m.name = line.substr(0, commaPos);                 // KEEP RAW TITLE (including quotes)
     std::string ratingField = line.substr(commaPos + 1);
 
-    Movie m;
-    m.name = unquoteCSVField(std::move(nameField));     // preserves internal quotes
-    m.name = trim_edges_ws_crlf(std::move(m.name));     // trim edges only
-
-    m.rating_out = normalizeRatingOut(std::move(ratingField));
+    m.rating_out = normalizeRatingOut(ratingField);
     m.rating10   = ratingStrToRating10(m.rating_out);
 
     return m;
 }
-
-/* ---------- API ---------- */
 
 std::vector<Movie> readMoviesCSV(const std::string& filename) {
     std::ifstream in(filename);
@@ -129,8 +77,8 @@ std::vector<Movie> readMoviesCSV(const std::string& filename) {
     return movies;
 }
 
-// IMPORTANT: Do NOT trim spaces—prefixes may include whitespace.
-// Only remove trailing CR from Windows line endings.
+// IMPORTANT: prefixes may include whitespace; do NOT trim.
+// Only strip trailing '\r' if present.
 std::vector<std::string> readPrefixes(const std::string& filename) {
     std::ifstream in(filename);
     if (!in) throw std::runtime_error("Could not open prefix file: " + filename);
@@ -138,7 +86,8 @@ std::vector<std::string> readPrefixes(const std::string& filename) {
     std::vector<std::string> prefixes;
     std::string line;
     while (std::getline(in, line)) {
-        prefixes.push_back(rstrip_cr(line));
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        prefixes.push_back(line);
     }
     return prefixes;
 }
